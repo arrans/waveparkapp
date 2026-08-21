@@ -1,0 +1,319 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Wave Park Occupancy API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: sessions
+    description: Wave session operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: List all sessions
+      description: Returns all occupancy sessions, optionally filtered by date
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Filter by date (YYYY-MM-DD)
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Create a session
+      description: Add a new occupancy session record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionInput"
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /sessions/upload:
+    post:
+      operationId: uploadSessions
+      tags: [sessions]
+      summary: Upload sessions from CSV
+      description: Bulk-replace sessions for dates present in the uploaded CSV
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionUpload"
+      responses:
+        "200":
+          description: Upload result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResult"
+
+  /sessions/dates:
+    get:
+      operationId: listDates
+      tags: [sessions]
+      summary: List available dates
+      description: Returns all distinct dates that have session data
+      responses:
+        "200":
+          description: List of dates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /sessions/summary:
+    get:
+      operationId: getDailySummary
+      tags: [sessions]
+      summary: Daily summary
+      description: Returns aggregated occupancy stats for a given date
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            description: Date to summarize (YYYY-MM-DD)
+      responses:
+        "200":
+          description: Daily summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailySummary"
+
+  /sessions/refresh:
+    post:
+      operationId: refreshSessions
+      tags: [sessions]
+      summary: Refresh session data from UrbnSurf API
+      description: Fetches today and tomorrow's session data from the UrbnSurf availability API, processes it, and saves to the database
+      responses:
+        "200":
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResult"
+
+  /sessions/last-refresh:
+    get:
+      operationId: getLastRefresh
+      tags: [sessions]
+      summary: Get last refresh timestamp
+      description: Returns the timestamp and stats of the most recent data refresh
+      responses:
+        "200":
+          description: Last refresh info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LastRefresh"
+        "404":
+          description: No refresh has been performed yet
+
+  /sessions/by-hour:
+    get:
+      operationId: getSessionsByHour
+      tags: [sessions]
+      summary: Sessions grouped by hour
+      description: Returns sessions for a given date grouped by hour with totals
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sessions by hour
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HourlyGroup"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    Session:
+      type: object
+      required: [id, date, time, title, wave_direction, capacity_booked, capacity_available]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+        time:
+          type: string
+        title:
+          type: string
+        wave_direction:
+          type: string
+          enum: [left, right]
+        capacity_booked:
+          type: integer
+        capacity_available:
+          type: integer
+
+    SessionInput:
+      type: object
+      required: [date, time, title, wave_direction, capacity_booked, capacity_available]
+      properties:
+        date:
+          type: string
+        time:
+          type: string
+        title:
+          type: string
+        wave_direction:
+          type: string
+          enum: [left, right]
+        capacity_booked:
+          type: integer
+        capacity_available:
+          type: integer
+
+    SessionUpload:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionInput"
+
+    UploadResult:
+      type: object
+      required: [inserted, deleted]
+      properties:
+        inserted:
+          type: integer
+        deleted:
+          type: integer
+
+    DailySummary:
+      type: object
+      required: [date, total_booked, total_available, total_capacity, occupancy_rate, peak_hour, wave_breakdown]
+      properties:
+        date:
+          type: string
+        total_booked:
+          type: integer
+        total_available:
+          type: integer
+        total_capacity:
+          type: integer
+        occupancy_rate:
+          type: number
+        peak_hour:
+          type: string
+        wave_breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/WaveDirectionStat"
+
+    WaveDirectionStat:
+      type: object
+      required: [wave_direction, total_booked, total_available, occupancy_rate]
+      properties:
+        wave_direction:
+          type: string
+        total_booked:
+          type: integer
+        total_available:
+          type: integer
+        occupancy_rate:
+          type: number
+
+    RefreshResult:
+      type: object
+      required: [inserted, deleted, refreshed_at]
+      properties:
+        inserted:
+          type: integer
+        deleted:
+          type: integer
+        refreshed_at:
+          type: string
+
+    LastRefresh:
+      type: object
+      required: [refreshed_at, inserted, deleted]
+      properties:
+        refreshed_at:
+          type: string
+        inserted:
+          type: integer
+        deleted:
+          type: integer
+
+    HourlyGroup:
+      type: object
+      required: [time, sessions, total_booked, total_available, total_capacity, occupancy_rate]
+      properties:
+        time:
+          type: string
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+        total_booked:
+          type: integer
+        total_available:
+          type: integer
+        total_capacity:
+          type: integer
+        occupancy_rate:
+          type: number
