@@ -1,6 +1,6 @@
-# [Project name]
+# Wave Park Occupancy
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Dashboard for monitoring UrbnSurf Melbourne wave-session occupancy and capacity.
 
 ## Run & Operate
 
@@ -8,8 +8,7 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Supabase migrations manage the application database schema.
 
 ## Stack
 
@@ -22,15 +21,21 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/wave-dashboard` — React dashboard
+- `artifacts/api-server` — API routes and Supabase data access
+- `lib/api-spec/openapi.yaml` — API contract source of truth
+- `lib/db/src/schema` — shared database shape definitions
+- Supabase project `wave_park_occupancy` — runtime data store
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Supabase PostgreSQL is the runtime database; the server accesses it through the connected Supabase connector.
+- The API keeps database access server-side so the dashboard never receives Supabase credentials.
+- The existing session and refresh-log data was migrated from Replit PostgreSQL into Supabase.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The dashboard displays wave-session occupancy by date and hour, supports live refreshes from UrbnSurf, and provides raw session data for inspection.
 
 ## User preferences
 
