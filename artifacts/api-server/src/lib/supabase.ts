@@ -32,11 +32,27 @@ async function request<T>(
   return response.json() as Promise<T>;
 }
 
-export function listSessions(date?: string) {
-  const query = date
-    ? `select=*&date=eq.${encodeURIComponent(date)}&order=time.asc`
-    : "select=*&order=date.asc,time.asc";
-  return request<SupabaseSession[]>(`sessions?${query}`);
+export async function listSessions(date?: string): Promise<SupabaseSession[]> {
+  if (date) {
+    return request<SupabaseSession[]>(
+      `sessions?select=*&date=eq.${encodeURIComponent(date)}&order=time.asc,id.asc`,
+    );
+  }
+
+  // PostgREST caps each response page; fetch all pages so newer sessions and
+  // dates remain visible after the dataset grows beyond that limit.
+  const pageSize = 1000;
+  const rows: SupabaseSession[] = [];
+  let offset = 0;
+  while (true) {
+    const page = await request<SupabaseSession[]>(
+      `sessions?select=*&order=date.asc,time.asc,id.asc&limit=${pageSize}&offset=${offset}`,
+    );
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    offset += page.length;
+  }
+  return rows;
 }
 
 export function createSession(session: Omit<SupabaseSession, "id">) {
