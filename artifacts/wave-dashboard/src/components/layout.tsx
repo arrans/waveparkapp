@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { Waves, LayoutDashboard, Server, RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
@@ -13,15 +13,22 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { useQueryClient } from "@tanstack/react-query";
 
 const COOLDOWN_MS = 3 * 60 * 1000;
+const AUTO_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { data: health } = useHealthCheck({ query: { retry: false, refetchInterval: 30000, queryKey: getHealthCheckQueryKey() } });
   const queryClient = useQueryClient();
+  const autoRefreshChecked = useRef(false);
 
-  // Poll last-refresh every 30s so other users' refreshes propagate to everyone's UI
-  const { data: lastRefresh } = useGetLastRefresh({
-    query: { queryKey: getGetLastRefreshQueryKey(), retry: false, refetchInterval: 30000 },
+  // Check the server's latest timestamp when the app opens and poll for other users' refreshes.
+  const { data: lastRefresh, isFetchedAfterMount } = useGetLastRefresh({
+    query: {
+      queryKey: getGetLastRefreshQueryKey(),
+      retry: false,
+      refetchInterval: 30000,
+      refetchOnMount: "always",
+    },
   });
 
   // Tick every second while cooling down to update the countdown display
@@ -48,6 +55,26 @@ export function Layout({ children }: { children: ReactNode }) {
       },
     },
   });
+
+  useEffect(() => {
+    if (!isFetchedAfterMount || autoRefreshChecked.current || refreshMutation.isPending) return;
+
+    // Guard the effect against duplicate calls from StrictMode and query polling.
+    autoRefreshChecked.current = true;
+    const refreshedAt = lastRefresh?.refreshed_at
+      ? Date.parse(lastRefresh.refreshed_at)
+      : Number.NaN;
+    const refreshIsDue =
+      !Number.isFinite(refreshedAt) ||
+      Date.now() - refreshedAt >= AUTO_REFRESH_INTERVAL_MS;
+
+    if (refreshIsDue) refreshMutation.mutate();
+  }, [
+    isFetchedAfterMount,
+    lastRefresh?.refreshed_at,
+    refreshMutation.isPending,
+    refreshMutation.mutate,
+  ]);
 
   const tooltipText = refreshMutation.isPending
     ? "Fetching live data…"
@@ -102,7 +129,12 @@ export function Layout({ children }: { children: ReactNode }) {
                 <Button
                   variant="ghost"
                   className={`h-9 px-3 sm:px-4 font-medium transition-all duration-300 text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground ${isCoolingDown ? "opacity-35 cursor-not-allowed" : ""}`}
-                  onClick={() => { if (!isCoolingDown) refreshMutation.mutate(); }}
+                  onClick={() => {
+                    if (!isCoolingDown) {
+                      autoRefreshChecked.current = true;
+                      refreshMutation.mutate();
+                    }
+                  }}
                   disabled={refreshMutation.isPending}
                 >
                   <RefreshCw className={`w-4 h-4 sm:mr-2 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
