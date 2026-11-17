@@ -80,7 +80,7 @@ export function Layout({ children }: { children: ReactNode }) {
     ? "Fetching live data…"
     : isCoolingDown
       ? `Next refresh available in ${secondsLeft}s`
-      : "Pull today & tomorrow from UrbnSurf";
+      : "Pull the next four days from UrbnSurf";
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background">
