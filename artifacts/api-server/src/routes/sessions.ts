@@ -76,7 +76,10 @@ router.post("/sessions/refresh", async (req, res) => {
 
   const tz = "Australia/Melbourne";
   const today = new Date().toLocaleDateString("en-CA", { timeZone: tz });
-  const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString("en-CA", { timeZone: tz });
+  const [year, month, day] = today.split("-").map(Number);
+  const datesToRefresh = Array.from({ length: 4 }, (_, offset) =>
+    new Date(Date.UTC(year, month - 1, day + offset)).toISOString().slice(0, 10),
+  );
 
   const fetchDay = async (date: string) => {
     const params = new URLSearchParams({
@@ -94,11 +97,8 @@ router.post("/sessions/refresh", async (req, res) => {
 
   let raw: any[];
   try {
-    const [todaySessions, tomorrowSessions] = await Promise.all([
-      fetchDay(today),
-      fetchDay(tomorrow),
-    ]);
-    raw = [...todaySessions, ...tomorrowSessions];
+    const sessionsByDay = await Promise.all(datesToRefresh.map(fetchDay));
+    raw = sessionsByDay.flat();
   } catch (err) {
     req.log.error({ err }, "Failed to fetch from UrbnSurf API");
     res.status(502).json({ error: "Failed to fetch from UrbnSurf API" });
@@ -130,7 +130,7 @@ router.post("/sessions/refresh", async (req, res) => {
 
   const rows = Array.from(grouped.values());
   let deleted = 0;
-  for (const date of [today, tomorrow]) deleted += await deleteSessionsByDate(date);
+  for (const date of datesToRefresh) deleted += await deleteSessionsByDate(date);
   const inserted = rows.length ? await insertSessions(rows) : [];
   const refreshedAt = new Date();
   await createRefreshLog({ inserted: inserted.length, deleted });
